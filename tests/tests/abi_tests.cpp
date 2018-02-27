@@ -89,11 +89,11 @@ const char* my_abi = R"=====(
          "name": "signature_arr",
          "type": "signature[]"
       },{
-         "name": "checksum",
-         "type": "checksum"
+         "name": "checksum256",
+         "type": "checksum256"
       },{
-         "name": "checksum_arr",
-         "type": "checksum[]"
+         "name": "checksum256_arr",
+         "type": "checksum256[]"
       },{
          "name": "fieldname",
          "type": "field_name"
@@ -118,12 +118,6 @@ const char* my_abi = R"=====(
       },{
          "name": "typename_arr",
          "type": "type_name[]"
-      },{
-         "name": "bytes",
-         "type": "bytes"
-      },{
-         "name": "bytes_arr",
-         "type": "bytes[]"
       },{
          "name": "uint8",
          "type": "uint8"
@@ -304,12 +298,6 @@ const char* my_abi = R"=====(
       },{
          "name": "abidef_arr",
          "type": "abi_def[]"
-      },{
-         "name": "nonce",
-         "type": "nonce"
-      },{
-         "name": "nonce_arr",
-         "type": "nonce[]"
       }]
     }
   ],
@@ -386,10 +374,12 @@ BOOST_AUTO_TEST_CASE(generator)
     FC_ASSERT(eosiolib_path != NULL);
 
     std::string include_param = std::string("-I") + eosiolib_path;
+    std::string stdcpp_include_param = std::string("-I") + eosiolib_path + "/libc++/upstream/include";
+    std::string stdc_include_param = std::string("-I") + eosiolib_path +  "/musl/upstream/include";
 
-    abi_def output;
+     abi_def output;
     bool res = runToolOnCodeWithArgs(new generate_abi_action(false, opt_sfs, "", output), source,
-      {"-fparse-all-comments", "--std=c++14", "--target=wasm32", include_param});
+      {"-fparse-all-comments", "--std=c++14", "--target=wasm32", "-ffreestanding", "-nostdlib", "-nostdlibinc", "-fno-threadsafe-statics", "-fno-rtti",  "-fno-exceptions", include_param, stdcpp_include_param, stdc_include_param });
 
     FC_ASSERT(res == true);
     abi_serializer(output).validate();
@@ -419,7 +409,8 @@ BOOST_AUTO_TEST_CASE(generator)
 
    const char* all_types = R"=====(
     #include <eosiolib/types.hpp>
-    #include <eosiolib/string.hpp>
+    #include <eosiolib/asset.hpp>
+    #include <string>
 
     typedef int field;
     typedef int struct_def;
@@ -440,48 +431,46 @@ BOOST_AUTO_TEST_CASE(generator)
 
    //@abi action
    struct test_struct {
-      eosio::string           field1;
+      std::string             field1;
       time                    field2;
       signature               field3;
-      checksum                field4;
+      checksum256             field4;
       field_name              field5;
       fixed_string32          field6;
       fixed_string16          field7;
       type_name               field8;
-      bytes                   field9;
-      uint8_t                 field10;
-      uint16_t                field11;
-      uint32_t                field12;
-      uint64_t                field13;
-      uint128_t               field14;
-      uint256                 field15;
-      int8_t                  field16;
-      int16_t                 field17;
-      int32_t                 field18;
-      int64_t                 field19;
-      eosio::name             field20;
-      field                   field21;
-      struct_def              field22;
-      fields                  field23;
-      account_name            field24;
-      permission_name         field25;
-      action_name             field26;
-      scope_name              field27;
-      permission_level        field28;
-      action                  field29;
-      permission_level_weight field30;
-      transaction             field31;
-      signed_transaction      field32;
-      key_weight              field33;
-      authority               field34;
-      chain_config            field35;
-      type_def                field36;
-      action_def              field37;
-      table_def               field38;
-      abi_def                 field39;
-      nonce                   field40;
-      public_key              field41;
-      asset                   field42;
+      uint8_t                 field9;
+      uint16_t                field10;
+      uint32_t                field11;
+      uint64_t                field12;
+      uint128_t               field13;
+      uint256                 field14;
+      int8_t                  field15;
+      int16_t                 field16;
+      int32_t                 field17;
+      int64_t                 field18;
+      eosio::name             field19;
+      field                   field20;
+      struct_def              field21;
+      fields                  field22;
+      account_name            field23;
+      permission_name         field24;
+      action_name             field25;
+      scope_name              field26;
+      permission_level        field27;
+      action                  field28;
+      permission_level_weight field29;
+      transaction             field30;
+      signed_transaction      field31;
+      key_weight              field32;
+      authority               field33;
+      chain_config            field34;
+      type_def                field35;
+      action_def              field36;
+      table_def               field37;
+      abi_def                 field38;
+      public_key              field39;
+      eosio::asset            field40;
    };
    )=====";
 
@@ -502,7 +491,7 @@ BOOST_AUTO_TEST_CASE(generator)
              "type": "signature"
           },{
              "name": "field4",
-             "type": "checksum"
+             "type": "checksum256"
           },{
              "name": "field5",
              "type": "field_name"
@@ -517,105 +506,99 @@ BOOST_AUTO_TEST_CASE(generator)
              "type": "type_name"
           },{
              "name": "field9",
-             "type": "bytes"
-          },{
-             "name": "field10",
              "type": "uint8"
           },{
-             "name": "field11",
+             "name": "field10",
              "type": "uint16"
           },{
-             "name": "field12",
+             "name": "field11",
              "type": "uint32"
           },{
-             "name": "field13",
+             "name": "field12",
              "type": "uint64"
           },{
-             "name": "field14",
+             "name": "field13",
              "type": "uint128"
           },{
-             "name": "field15",
+             "name": "field14",
              "type": "uint256"
           },{
-             "name": "field16",
+             "name": "field15",
              "type": "int8"
           },{
-             "name": "field17",
+             "name": "field16",
              "type": "int16"
           },{
-             "name": "field18",
+             "name": "field17",
              "type": "int32"
           },{
-             "name": "field19",
+             "name": "field18",
              "type": "int64"
           },{
-             "name": "field20",
+             "name": "field19",
              "type": "name"
           },{
-             "name": "field21",
+             "name": "field20",
              "type": "field"
           },{
-             "name": "field22",
+             "name": "field21",
              "type": "struct_def"
           },{
-             "name": "field23",
+             "name": "field22",
              "type": "fields"
           },{
-             "name": "field24",
+             "name": "field23",
              "type": "account_name"
           },{
-             "name": "field25",
+             "name": "field24",
              "type": "permission_name"
           },{
-             "name": "field26",
+             "name": "field25",
              "type": "action_name"
           },{
-             "name": "field27",
+             "name": "field26",
              "type": "scope_name"
           },{
-             "name": "field28",
+             "name": "field27",
              "type": "permission_level"
           },{
-             "name": "field29",
+             "name": "field28",
              "type": "action"
           },{
-             "name": "field30",
+             "name": "field29",
              "type": "permission_level_weight"
           },{
-             "name": "field31",
+             "name": "field30",
              "type": "transaction"
           },{
-             "name": "field32",
+             "name": "field31",
              "type": "signed_transaction"
           },{
-             "name": "field33",
+             "name": "field32",
              "type": "key_weight"
           },{
-             "name": "field34",
+             "name": "field33",
              "type": "authority"
           },{
-             "name": "field35",
+             "name": "field34",
              "type": "chain_config"
           },{
-             "name": "field36",
+             "name": "field35",
              "type": "type_def"
           },{
-             "name": "field37",
+             "name": "field36",
              "type": "action_def"
           },{
-             "name": "field38",
+             "name": "field37",
              "type": "table_def"
           },{
-             "name": "field39",
+             "name": "field38",
              "type": "abi_def"
           },{
-             "name": "field40",
-             "type": "nonce"
-          },{
-             "name": "field41",
+             "name": "field39",
              "type": "public_key"
           },{
-             "name": "field42",
+             "name": "field40",
              "type": "asset"
           }]
            }],
@@ -703,7 +686,7 @@ BOOST_AUTO_TEST_CASE(generator)
 
    const char* all_indexes = R"=====(
    #include <eosiolib/types.hpp>
-   #include <eosiolib/string.hpp>
+   #include <string>
 
    using namespace eosio;
 
@@ -732,7 +715,7 @@ BOOST_AUTO_TEST_CASE(generator)
 
    //@abi table
    struct table4 {
-      eosio::string key;
+      std::string key;
       my_complex_value value;
    };
 
@@ -978,12 +961,12 @@ BOOST_AUTO_TEST_CASE(generator)
 
    const char* str_table_decl = R"=====(
    #include <eosiolib/types.hpp>
-   #include <eosiolib/string.hpp>
+   #include <string>
 
    //@abi table
    class table1 {
    public:
-      eosio::string name;
+      std::string name;
       uint32_t age;
    };
 
@@ -1296,8 +1279,8 @@ BOOST_AUTO_TEST_CASE(general)
     {
       "publickey"     :  "EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV",
       "publickey_arr" :  ["EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV","EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV","EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV"],
-      "asset"         : "100.00 EOS",
-      "asset_arr"     : ["100.00 EOS","100.00 EOS"],
+      "asset"         : "100.0000 EOS",
+      "asset_arr"     : ["100.0000 EOS","100.0000 EOS"],
 
       "string"            : "ola ke ase",
       "string_arr"        : ["ola ke ase","ola ke desi"],
@@ -1305,8 +1288,8 @@ BOOST_AUTO_TEST_CASE(general)
       "time_arr"          : ["2021-12-20T15:30","2021-12-20T15:31"],
       "signature"         : "EOSJzdpi5RCzHLGsQbpGhndXBzcFs8vT5LHAtWLMxPzBdwRHSmJkcCdVu6oqPUQn1hbGUdErHvxtdSTS1YA73BThQFwT77X1U",
       "signature_arr"     : ["EOSJzdpi5RCzHLGsQbpGhndXBzcFs8vT5LHAtWLMxPzBdwRHSmJkcCdVu6oqPUQn1hbGUdErHvxtdSTS1YA73BThQFwT77X1U","EOSJzdpi5RCzHLGsQbpGhndXBzcFs8vT5LHAtWLMxPzBdwRHSmJkcCdVu6oqPUQn1hbGUdErHvxtdSTS1YA73BThQFwT77X1U"],
-      "checksum"          : "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-      "checksum_arr"      : ["ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad","ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+      "checksum256"       : "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "checksum256_arr"      : ["ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad","ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
       "fieldname"         : "name1",
       "fieldname_arr"     : ["name1","name2"],
       "fixedstring32"     : "1234567890abcdef1234567890abcdef",
@@ -1364,8 +1347,6 @@ BOOST_AUTO_TEST_CASE(general)
         "ref_block_prefix":"2",
         "expiration":"2021-12-20T15:30",
         "region": "1",
-        "read_scope":["acc1"],
-        "write_scope":["acc1"],
         "actions":[{"scope":"scopename1", "name":"actionname1", "authorization":[{"actor":"acc1","permission":"permname1"}], "data":"445566"}]
       },
       "transaction_arr": [{
@@ -1373,16 +1354,12 @@ BOOST_AUTO_TEST_CASE(general)
         "ref_block_prefix":"2",
         "expiration":"2021-12-20T15:30",
         "region": "1",
-        "read_scope":["acc1"],
-        "write_scope":["acc1"],
         "actions":[{"scope":"acc1", "name":"actionname1", "authorization":[{"actor":"acc1","permission":"permname1"}], "data":"445566"}]
       },{
         "ref_block_num":"2",
         "ref_block_prefix":"3",
         "expiration":"2021-12-20T15:40",
         "region": "1",
-        "read_scope":["acc2"],
-        "write_scope":["acc2"],
         "actions":[{"scope":"acc2", "name":"actionname2", "authorization":[{"actor":"acc2","permission":"permname2"}], "data":""}]
       }],
       "strx": {
@@ -1390,8 +1367,6 @@ BOOST_AUTO_TEST_CASE(general)
         "ref_block_prefix":"2",
         "expiration":"2021-12-20T15:30",
         "region": "1",
-        "read_scope":["acc1"],
-        "write_scope":["acc1"],
         "signatures" : ["EOSJzdpi5RCzHLGsQbpGhndXBzcFs8vT5LHAtWLMxPzBdwRHSmJkcCdVu6oqPUQn1hbGUdErHvxtdSTS1YA73BThQFwT77X1U"],
         "actions":[{"scope":"scopename1", "name":"actionname1", "authorization":[{"actor":"acc1","permission":"permname1"}], "data":"445566"}]
       },
@@ -1400,8 +1375,6 @@ BOOST_AUTO_TEST_CASE(general)
         "ref_block_prefix":"2",
         "expiration":"2021-12-20T15:30",
         "region": "1",
-        "read_scope":["acc1"],
-        "write_scope":["acc1"],
         "signatures" : ["EOSJzdpi5RCzHLGsQbpGhndXBzcFs8vT5LHAtWLMxPzBdwRHSmJkcCdVu6oqPUQn1hbGUdErHvxtdSTS1YA73BThQFwT77X1U"],
         "actions":[{"scope":"acc1", "name":"actionname1", "authorization":[{"actor":"acc1","permission":"permname1"}], "data":"445566"}]
       },{
@@ -1409,8 +1382,6 @@ BOOST_AUTO_TEST_CASE(general)
         "ref_block_prefix":"3",
         "expiration":"2021-12-20T15:40",
         "region": "1",
-        "read_scope":["acc2"],
-        "write_scope":["acc2"],
         "signatures" : ["EOSJzdpi5RCzHLGsQbpGhndXBzcFs8vT5LHAtWLMxPzBdwRHSmJkcCdVu6oqPUQn1hbGUdErHvxtdSTS1YA73BThQFwT77X1U"],
         "actions":[{"scope":"acc2", "name":"actionname2", "authorization":[{"actor":"acc2","permission":"permname2"}], "data":""}]
       }],
@@ -1431,7 +1402,6 @@ BOOST_AUTO_TEST_CASE(general)
          "accounts":[{"permission":{"actor":"acc1","permission":"permname1"},"weight":"1"},{"permission":{"actor":"acc2","permission":"permname2"},"weight":"2"}]
        }],
       "chainconfig": {
-         "producer_pay": "100",
          "target_block_size": "200",
          "max_block_size": "300",
          "target_block_acts_per_scope": "400",
@@ -1448,7 +1418,6 @@ BOOST_AUTO_TEST_CASE(general)
          "max_generated_transaction_size": "1500"
       },
       "chainconfig_arr": [{
-         "producer_pay": "100",
          "target_block_size": "200",
          "max_block_size": "300",
          "target_block_acts_per_scope": "400",
@@ -1464,7 +1433,6 @@ BOOST_AUTO_TEST_CASE(general)
          "max_inline_action_size": "1400",
          "max_generated_transaction_size": "1500"
       },{
-         "producer_pay": "100",
          "target_block_size": "200",
          "max_block_size": "300",
          "target_block_acts_per_scope": "400",
@@ -1505,14 +1473,6 @@ BOOST_AUTO_TEST_CASE(general)
         "structs" : [{"name":"struct1", "base":"base1", "fields": [{"name":"name1", "type": "type1"}, {"name":"name2", "type": "type2"}] }],
         "actions" : [{"name":"action1","type":"type1"}],
         "tables" : [{"name":"table1","index_type":"indextype1","key_names":["keyname1"],"key_types":["typename1"],"type":"type1"}]
-      }],
-      "nonce": {
-         "value": "nonce1"
-      },
-      "nonce_arr": [{
-         "value": "nonce1"
-      },{
-         "value": "nonce2"
       }]
     }
    )=====";
@@ -1573,248 +1533,10 @@ BOOST_AUTO_TEST_CASE(abi_cycle)
 
 } FC_LOG_AND_RETHROW() }
 
-BOOST_AUTO_TEST_CASE(transfer)
-{ try {
-
-   abi_serializer abis(chain_initializer::eos_contract_abi());
-
-   const char* test_data = R"=====(
-   {
-     "from" : "from.acct",
-     "to" : "to.acct",
-     "amount" : 18446744073709551515,
-     "memo" : "really important transfer"
-   }
-   )=====";
-
-   auto var = fc::json::from_string(test_data);
-
-   auto transfer = var.as<contracts::transfer>();
-   BOOST_TEST("from.acct" == transfer.from);
-   BOOST_TEST("to.acct" == transfer.to);
-   BOOST_TEST(18446744073709551515u == transfer.amount);
-   BOOST_TEST("really important transfer" == transfer.memo);
-
-   auto var2 = verify_round_trip_conversion( abis, "transfer", var );
-   auto transfer2 = var2.as<contracts::transfer>();
-   BOOST_TEST(transfer.from == transfer2.from);
-   BOOST_TEST(transfer.to == transfer2.to);
-   BOOST_TEST(transfer.amount == transfer2.amount);
-   BOOST_TEST(transfer.memo == transfer2.memo);
-
-} FC_LOG_AND_RETHROW() }
-
-BOOST_AUTO_TEST_CASE(lock)
-{ try {
-
-   abi_serializer abis(chain_initializer::eos_contract_abi());
-
-   BOOST_CHECK(true);   
-   const char* test_data = R"=====(
-   {
-     "from" : "from.acct",
-     "to" : "to.acct",
-     "amount" : -9223372036854775807,
-   }
-   )=====";
-
-   auto var = fc::json::from_string(test_data);
-
-   auto lock = var.as<contracts::lock>();
-   BOOST_TEST("from.acct" == lock.from);
-   BOOST_TEST("to.acct" == lock.to);
-   BOOST_TEST(-9223372036854775807 == lock.amount);
-
-   auto var2 = verify_round_trip_conversion( abis, "lock", var );
-   auto lock2 = var2.as<contracts::lock>();
-   BOOST_TEST(lock.from == lock2.from);
-   BOOST_TEST(lock.to == lock2.to);
-   BOOST_TEST(lock.amount == lock2.amount);
-
-} FC_LOG_AND_RETHROW() }
-
-BOOST_AUTO_TEST_CASE(unlock)
-{ try {
-
-   abi_serializer abis(chain_initializer::eos_contract_abi());
-
-   BOOST_CHECK(true);
-   const char* test_data = R"=====(
-   {
-     "account" : "an.acct",
-     "amount" : -9223372036854775807,
-   }
-   )=====";
-
-   auto var = fc::json::from_string(test_data);
-
-   auto unlock = var.as<contracts::unlock>();
-   BOOST_TEST("an.acct" == unlock.account);
-   BOOST_TEST(-9223372036854775807 == unlock.amount);
-
-   auto var2 = verify_round_trip_conversion( abis, "unlock", var );
-   auto unlock2 = var2.as<contracts::unlock>();
-   BOOST_TEST(unlock.account == unlock2.account);
-   BOOST_TEST(unlock.amount == unlock2.amount);
-
-} FC_LOG_AND_RETHROW() }
-
-BOOST_AUTO_TEST_CASE(claim)
-{ try {
-
-   abi_serializer abis(chain_initializer::eos_contract_abi());
-
-   BOOST_CHECK(true);
-   const char* test_data = R"=====(
-   {
-     "account" : "an.acct",
-     "amount" : -9223372036854775807,
-   }
-   )=====";
-
-   auto var = fc::json::from_string(test_data);
-
-   auto claim = var.as<contracts::claim>();
-   BOOST_TEST("an.acct" == claim.account);
-   BOOST_TEST(-9223372036854775807 == claim.amount);
-
-   auto var2 = verify_round_trip_conversion( abis, "claim", var );
-   auto claim2 = var2.as<contracts::claim>();
-   BOOST_TEST(claim.account == claim2.account);
-   BOOST_TEST(claim.amount == claim2.amount);
-
-} FC_LOG_AND_RETHROW() }
-
-BOOST_AUTO_TEST_CASE(okproducer)
-{ try {
-
-   abi_serializer abis(chain_initializer::eos_contract_abi());
-
-   BOOST_CHECK(true);
-   const char* test_data = R"=====(
-   {
-     "voter" : "an.acct",
-     "producer" : "an.acct2",
-     "approve" : -128,
-   }
-   )=====";
-
-   auto var = fc::json::from_string(test_data);
-
-   auto okproducer = var.as<contracts::okproducer>();
-   BOOST_TEST("an.acct" == okproducer.voter);
-   BOOST_TEST("an.acct2" == okproducer.producer);
-   BOOST_TEST(-128 == okproducer.approve);
-
-   auto var2 = verify_round_trip_conversion( abis, "okproducer", var );
-   auto okproducer2 = var2.as<contracts::okproducer>();
-   BOOST_TEST(okproducer.voter == okproducer2.voter);
-   BOOST_TEST(okproducer.producer == okproducer2.producer);
-   BOOST_TEST(okproducer.approve == okproducer2.approve);
-
-} FC_LOG_AND_RETHROW() }
-
-BOOST_AUTO_TEST_CASE(setproducer)
-{ try {
-
-   abi_serializer abis(chain_initializer::eos_contract_abi());
-   const char* test_data = R"=====(
-   {
-     "name" : "acct.name",
-     "key" : "EOS5PnYq6BZn7H9GvL68cCLjWUZThRemTJoJmybCn1iEpVUXLb5Az",
-     "configuration" : {
-        "producer_pay": "-9223372036854775717",
-        "target_block_size": "2147483145",
-        "max_block_size": "2147483135",
-        "target_block_acts_per_scope": "2147473155",
-        "max_block_acts_per_scope": "2147483165",
-        "target_block_acts": "4194967295",
-        "max_block_acts": "4294957295",
-        "real_threads": "9223372036854772717",
-        "max_storage_size": "9223372036854775805",
-        "max_transaction_lifetime": "2147483125",
-        "max_authority_depth": "63777",
-        "max_transaction_exec_time": "2146483015",
-        "max_inline_depth": "64267",
-        "max_inline_action_size": "4294867295",
-        "max_generated_transaction_size": "4292967295"
-     }
-   }
-   )=====";
-
-   auto var = fc::json::from_string(test_data);
-
-   auto setproducer = var.as<contracts::setproducer>();
-   BOOST_TEST("acct.name" == setproducer.name);
-   BOOST_TEST("EOS5PnYq6BZn7H9GvL68cCLjWUZThRemTJoJmybCn1iEpVUXLb5Az" == (string)setproducer.key);
-   BOOST_TEST(-9223372036854775717 == setproducer.configuration.producer_pay);
-   BOOST_TEST(2147483145u == setproducer.configuration.target_block_size);
-   BOOST_TEST(2147483135u == setproducer.configuration.max_block_size);
-   BOOST_TEST(2147473155u == setproducer.configuration.target_block_acts_per_scope);
-   BOOST_TEST(2147483165u == setproducer.configuration.max_block_acts_per_scope);
-   BOOST_TEST(4194967295u == setproducer.configuration.target_block_acts);
-   BOOST_TEST(4294957295u == setproducer.configuration.max_block_acts);
-   BOOST_TEST(9223372036854772717u == setproducer.configuration.real_threads);
-   BOOST_TEST(9223372036854775805u == setproducer.configuration.max_storage_size);
-   BOOST_TEST(2147483125u == setproducer.configuration.max_transaction_lifetime);
-   BOOST_TEST(63777u == setproducer.configuration.max_authority_depth);
-   BOOST_TEST(2146483015u == setproducer.configuration.max_transaction_exec_time);
-   BOOST_TEST(64267u == setproducer.configuration.max_inline_depth);
-   BOOST_TEST(4294867295u == setproducer.configuration.max_inline_action_size);
-   BOOST_TEST(4292967295u == setproducer.configuration.max_generated_transaction_size);
-
-   auto var2 = verify_round_trip_conversion( abis, "setproducer", var );
-   auto setproducer2 = var2.as<contracts::setproducer>();
-   BOOST_TEST(setproducer.name == setproducer2.name);
-   BOOST_TEST((string)setproducer.key == (string)setproducer2.key);
-   BOOST_TEST(setproducer.configuration.producer_pay == setproducer2.configuration.producer_pay);
-   BOOST_TEST(setproducer.configuration.target_block_size == setproducer2.configuration.target_block_size);
-   BOOST_TEST(setproducer.configuration.max_block_size == setproducer2.configuration.max_block_size);
-   BOOST_TEST(setproducer.configuration.target_block_acts_per_scope == setproducer2.configuration.target_block_acts_per_scope);
-   BOOST_TEST(setproducer.configuration.max_block_acts_per_scope == setproducer2.configuration.max_block_acts_per_scope);
-   BOOST_TEST(setproducer.configuration.target_block_acts == setproducer2.configuration.target_block_acts);
-   BOOST_TEST(setproducer.configuration.max_block_acts == setproducer2.configuration.max_block_acts);
-   BOOST_TEST(setproducer.configuration.real_threads == setproducer2.configuration.real_threads);
-   BOOST_TEST(setproducer.configuration.max_storage_size == setproducer2.configuration.max_storage_size);
-   BOOST_TEST(setproducer.configuration.max_transaction_lifetime == setproducer2.configuration.max_transaction_lifetime);
-   BOOST_TEST(setproducer.configuration.max_authority_depth == setproducer2.configuration.max_authority_depth);
-   BOOST_TEST(setproducer.configuration.max_transaction_exec_time == setproducer2.configuration.max_transaction_exec_time);
-   BOOST_TEST(setproducer.configuration.max_inline_depth == setproducer2.configuration.max_inline_depth);
-   BOOST_TEST(setproducer.configuration.max_inline_action_size == setproducer2.configuration.max_inline_action_size);
-   BOOST_TEST(setproducer.configuration.max_generated_transaction_size == setproducer2.configuration.max_generated_transaction_size);
-
-} FC_LOG_AND_RETHROW() }
-
-BOOST_AUTO_TEST_CASE(setproxy)
-{ try {
-
-   abi_serializer abis(chain_initializer::eos_contract_abi());
-
-   BOOST_CHECK(true);
-   const char* test_data = R"=====(
-   {
-     "stakeholder" : "stake.hldr",
-     "proxy" : "stkhdr.prxy"
-   }
-   )=====";
-
-   auto var = fc::json::from_string(test_data);
-
-   auto setproxy = var.as<contracts::setproxy>();
-   BOOST_TEST("stake.hldr" == setproxy.stakeholder);
-   BOOST_TEST("stkhdr.prxy" == setproxy.proxy);
-
-   auto var2 = verify_round_trip_conversion( abis, "setproxy", var );
-   auto setproxy2 = var2.as<contracts::setproxy>();
-   BOOST_TEST(setproxy.stakeholder == setproxy2.stakeholder);
-   BOOST_TEST(setproxy.proxy == setproxy2.proxy);
-
-} FC_LOG_AND_RETHROW() }
-
 BOOST_AUTO_TEST_CASE(linkauth)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    BOOST_CHECK(true);
    const char* test_data = R"=====(
@@ -1846,7 +1568,7 @@ BOOST_AUTO_TEST_CASE(linkauth)
 BOOST_AUTO_TEST_CASE(unlinkauth)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    BOOST_CHECK(true);
    const char* test_data = R"=====(
@@ -1875,7 +1597,7 @@ BOOST_AUTO_TEST_CASE(unlinkauth)
 BOOST_AUTO_TEST_CASE(updateauth)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    BOOST_CHECK(true);
    const char* test_data = R"=====(
@@ -1942,7 +1664,7 @@ BOOST_AUTO_TEST_CASE(updateauth)
 BOOST_AUTO_TEST_CASE(deleteauth)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    BOOST_CHECK(true);
    const char* test_data = R"=====(
@@ -1968,7 +1690,7 @@ BOOST_AUTO_TEST_CASE(deleteauth)
 BOOST_AUTO_TEST_CASE(newaccount)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    BOOST_CHECK(true);
    const char* test_data = R"=====(
@@ -1995,8 +1717,7 @@ BOOST_AUTO_TEST_CASE(newaccount)
                    {"key" : "EOS5eVr9TVnqwnUBNwf9kwMTbrHvX5aPyyEG97dz2b2TNeqWRzbJf", "weight" : 57605} ],
         "accounts" : [ {"permission" : {"actor" : "prm.acct1", "permission" : "prm.prm1"}, "weight" : 53005 },
                        {"permission" : {"actor" : "prm.acct2", "permission" : "prm.prm2"}, "weight" : 53405 }]
-     },
-     "deposit" : "-90000000.0000 EOS"
+     }
    }
    )=====";
 
@@ -2054,9 +1775,6 @@ BOOST_AUTO_TEST_CASE(newaccount)
    BOOST_TEST("prm.prm2" == newaccount.recovery.accounts[1].permission.permission);
    BOOST_TEST(53405u == newaccount.recovery.accounts[1].weight);
 
-   BOOST_TEST(-900000000000 == newaccount.deposit.amount);
-   BOOST_TEST(symbol(EOS_SYMBOL) == newaccount.deposit.symbol());
-
    auto var2 = verify_round_trip_conversion( abis, "newaccount", var );
    auto newaccount2 = var2.as<contracts::newaccount>();
    BOOST_TEST(newaccount.creator == newaccount2.creator);
@@ -2110,16 +1828,13 @@ BOOST_AUTO_TEST_CASE(newaccount)
    BOOST_TEST(newaccount.recovery.accounts[1].permission.permission == newaccount2.recovery.accounts[1].permission.permission);
    BOOST_TEST(newaccount.recovery.accounts[1].weight == newaccount2.recovery.accounts[1].weight);
 
-   BOOST_TEST(newaccount.deposit.amount == newaccount2.deposit.amount);
-   BOOST_TEST(newaccount.deposit.symbol() == newaccount2.deposit.symbol());
-
 } FC_LOG_AND_RETHROW() }
 
 
 BOOST_AUTO_TEST_CASE(setcode)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    const char* test_data = R"=====(
    {
@@ -2150,7 +1865,7 @@ BOOST_AUTO_TEST_CASE(setcode)
 BOOST_AUTO_TEST_CASE(setabi)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    const char* test_data = R"=====(
    {
@@ -2313,7 +2028,7 @@ BOOST_AUTO_TEST_CASE(setabi)
 BOOST_AUTO_TEST_CASE(postrecovery)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    const char* test_data = R"=====(
    {
@@ -2363,7 +2078,7 @@ BOOST_AUTO_TEST_CASE(postrecovery)
 BOOST_AUTO_TEST_CASE(passrecovery)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    const char* test_data = R"=====(
    {
@@ -2385,7 +2100,7 @@ BOOST_AUTO_TEST_CASE(passrecovery)
 BOOST_AUTO_TEST_CASE(vetorecovery)
 { try {
 
-   abi_serializer abis(chain_initializer::eos_contract_abi());
+   abi_serializer abis(chain_initializer::eos_contract_abi(abi_def()));
 
    const char* test_data = R"=====(
    {
@@ -2403,29 +2118,6 @@ BOOST_AUTO_TEST_CASE(vetorecovery)
    BOOST_TEST(vetorecovery.account == vetorecovery2.account);
 
 } FC_LOG_AND_RETHROW() }
-
-BOOST_AUTO_TEST_CASE(nonce)
-{ try {
-
-   abi_serializer abis(chain_initializer::eos_contract_abi());
-
-   const char* test_data = R"=====(
-   {
-     "value" : "nonce.value"
-   }
-   )=====";
-
-   auto var = fc::json::from_string(test_data);
-
-   auto nonce = var.as<contracts::nonce>();
-   BOOST_TEST("nonce.value" == nonce.value);
-
-   auto var2 = verify_round_trip_conversion( abis, "nonce", var );
-   auto nonce2 = var2.as<contracts::nonce>();
-   BOOST_TEST(nonce.value == nonce2.value);
-
-} FC_LOG_AND_RETHROW() }
-
 
 BOOST_AUTO_TEST_CASE(abi_type_repeat)
 { try {

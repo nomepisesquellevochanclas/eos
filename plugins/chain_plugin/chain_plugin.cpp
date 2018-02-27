@@ -13,7 +13,6 @@
 
 
 #include <eosio/chain/contracts/chain_initializer.hpp>
-#include <eosio/chain/contracts/staked_balance_objects.hpp>
 #include <eosio/chain/contracts/genesis_state.hpp>
 #include <eosio/chain/contracts/eos_contract.hpp>
 
@@ -30,7 +29,6 @@ using namespace eosio::chain;
 using namespace eosio::chain::config;
 using fc::flat_map;
 
-#warning TODO: rate limiting
 //using txn_msg_rate_limits = chain_controller::txn_msg_rate_limits;
 
 
@@ -48,22 +46,10 @@ public:
    fc::optional<chain_controller::controller_config> chain_config = chain_controller::controller_config();
    fc::optional<chain_controller>   chain;
    chain_id_type                    chain_id;
-   uint32_t                         rcvd_block_txn_execution_time;
-   uint32_t                         txn_execution_time;
-   uint32_t                         create_block_txn_execution_time;
+   uint32_t                         max_reversible_block_time_ms;
+   uint32_t                         max_pending_transaction_time_ms;
    //txn_msg_rate_limits              rate_limits;
 };
-
-#ifdef NDEBUG
-const uint32_t chain_plugin::default_received_block_transaction_execution_time = 12;
-const uint32_t chain_plugin::default_transaction_execution_time = 3;
-const uint32_t chain_plugin::default_create_block_transaction_execution_time = 3;
-#else
-const uint32_t chain_plugin::default_received_block_transaction_execution_time = 72;
-const uint32_t chain_plugin::default_transaction_execution_time = 18;
-const uint32_t chain_plugin::default_create_block_transaction_execution_time = 18;
-#endif
-
 
 chain_plugin::chain_plugin()
 :my(new chain_plugin_impl()) {
@@ -79,12 +65,10 @@ void chain_plugin::set_program_options(options_description& cli, options_descrip
          ("block-log-dir", bpo::value<bfs::path>()->default_value("blocks"),
           "the location of the block log (absolute path or relative to application data dir)")
          ("checkpoint,c", bpo::value<vector<string>>()->composing(), "Pairs of [BLOCK_NUM,BLOCK_ID] that should be enforced as checkpoints.")
-         ("rcvd-block-trans-execution-time", bpo::value<uint32_t>()->default_value(default_received_block_transaction_execution_time),
-          "Limits the maximum time (in milliseconds) that is allowed a transaction's code to execute from a received block.")
-         ("trans-execution-time", bpo::value<uint32_t>()->default_value(default_transaction_execution_time),
-          "Limits the maximum time (in milliseconds) that is allowed a pushed transaction's code to execute.")
-         ("create-block-trans-execution-time", bpo::value<uint32_t>()->default_value(default_create_block_transaction_execution_time),
-          "Limits the maximum time (in milliseconds) that is allowed a transaction's code to execute while creating a block.")
+         ("max-reversible-block-time", bpo::value<int32_t>()->default_value(-1),
+          "Limits the maximum time (in milliseconds) that a reversible block is allowed to run before being considered invalid")
+         ("max-pending-transaction-time", bpo::value<int32_t>()->default_value(-1),
+          "Limits the maximum time (in milliseconds) that is allowed a pushed transaction's code to execute before being considered invalid")
 #warning TODO: rate limiting
          /*("per-authorized-account-transaction-msg-rate-limit-time-frame-sec", bpo::value<uint32_t>()->default_value(default_per_auth_account_time_frame_seconds),
           "The time frame, in seconds, that the per-authorized-account-transaction-msg-rate-limit is imposed over.")
@@ -170,9 +154,8 @@ void chain_plugin::plugin_initialize(const variables_map& options) {
       }
    }
 
-   my->rcvd_block_txn_execution_time = options.at("rcvd-block-trans-execution-time").as<uint32_t>() * 1000;
-   my->txn_execution_time = options.at("trans-execution-time").as<uint32_t>() * 1000;
-   my->create_block_txn_execution_time = options.at("create-block-trans-execution-time").as<uint32_t>() * 1000;
+   my->max_reversible_block_time_ms = options.at("max-reversible-block-time").as<int32_t>();
+   my->max_pending_transaction_time_ms = options.at("max-pending-transaction-time").as<int32_t>();
 
 #warning TODO: Rate Limits
    /*my->rate_limits.per_auth_account_time_frame_sec = fc::time_point_sec(options.at("per-authorized-account-transaction-msg-rate-limit-time-frame-sec").as<uint32_t>());
@@ -193,6 +176,14 @@ void chain_plugin::plugin_startup()
    my->chain_config->genesis = fc::json::from_file(my->genesis_file).as<contracts::genesis_state_type>();
    if (my->genesis_timestamp.sec_since_epoch() > 0) {
       my->chain_config->genesis.initial_timestamp = my->genesis_timestamp;
+   }
+
+   if (my->max_reversible_block_time_ms > 0) {
+      my->chain_config->limits.max_push_block_us = fc::milliseconds(my->max_reversible_block_time_ms);
+   }
+
+   if (my->max_pending_transaction_time_ms > 0) {
+      my->chain_config->limits.max_push_transaction_us = fc::milliseconds(my->max_pending_transaction_time_ms);
    }
 
    my->chain.emplace(*my->chain_config);
@@ -230,7 +221,7 @@ bool chain_plugin::accept_block(const signed_block& block, bool currently_syncin
    return true;
 }
 
-void chain_plugin::accept_transaction(const signed_transaction& trx) {
+void chain_plugin::accept_transaction(const packed_transaction& trx) {
    chain().push_transaction(trx, my->skip_flags);
 }
 
@@ -333,7 +324,7 @@ read_only::get_table_rows_result read_only::get_table_rows( const read_only::get
 
 vector<asset> read_only::get_currency_balance( const read_only::get_currency_balance_params& p )const {
    vector<asset> results;
-   walk_table<contracts::key_value_index, contracts::by_scope_primary>(p.account, p.code, N(account), [&](const contracts::key_value_object& obj){
+   walk_table<contracts::key_value_index, contracts::by_scope_primary>(p.code, p.account, N(account), [&](const contracts::key_value_object& obj){
       share_type balance;
       fc::datastream<const char *> ds(obj.value.data(), obj.value.size());
       fc::raw::unpack(ds, balance);
@@ -367,18 +358,52 @@ fc::variant read_only::get_currency_stats( const read_only::get_currency_stats_p
    return results;
 }
 
-read_only::get_block_results read_only::get_block(const read_only::get_block_params& params) const {
+template<typename Api>
+struct resolver_factory {
+   static auto make(const Api *api) {
+      return [api](const account_name &name) -> optional<abi_serializer> {
+         const auto *accnt = api->db.get_database().template find<account_object, by_name>(name);
+         if (accnt != nullptr) {
+            abi_def abi;
+            if (abi_serializer::to_abi(accnt->abi, abi)) {
+               return abi_serializer(abi);
+            }
+         }
+
+         return optional<abi_serializer>();
+      };
+   }
+};
+
+template<typename Api>
+auto make_resolver(const Api *api) {
+   return resolver_factory<Api>::make(api);
+}
+
+fc::variant read_only::get_block(const read_only::get_block_params& params) const {
+   optional<signed_block> block;
    try {
-      if (auto block = db.fetch_block_by_id(fc::json::from_string(params.block_num_or_id).as<block_id_type>()))
-         return *block;
-   } catch (fc::bad_cast_exception) {/* do nothing */}
-   try {
-      if (auto block = db.fetch_block_by_number(fc::to_uint64(params.block_num_or_id)))
-         return *block;
+      block = db.fetch_block_by_id(fc::json::from_string(params.block_num_or_id).as<block_id_type>());
+      if (!block) {
+         block = db.fetch_block_by_number(fc::to_uint64(params.block_num_or_id));
+      }
+
    } catch (fc::bad_cast_exception) {/* do nothing */}
 
-   FC_THROW_EXCEPTION(unknown_block_exception,
+   if (!block)
+      FC_THROW_EXCEPTION(unknown_block_exception,
                       "Could not find block: ${block}", ("block", params.block_num_or_id));
+
+   fc::variant pretty_output;
+   abi_serializer::to_variant(*block, pretty_output, make_resolver(this));
+
+
+
+
+   return fc::mutable_variant_object(pretty_output.get_object())
+           ("id", block->id())
+           ("block_num",block->block_num())
+           ("ref_block_prefix", block->id()._hash[1]);
 }
 
 read_write::push_block_results read_write::push_block(const read_write::push_block_params& params) {
@@ -387,25 +412,14 @@ read_write::push_block_results read_write::push_block(const read_write::push_blo
 }
 
 read_write::push_transaction_results read_write::push_transaction(const read_write::push_transaction_params& params) {
-   signed_transaction pretty_input;
-   auto resolver = [&,this]( const account_name& name ) -> optional<abi_serializer> {
-      const auto* accnt  = db.get_database().find<account_object,by_name>( name );
-      if (accnt != nullptr) {
-         abi_def abi;
-         if (abi_serializer::to_abi(accnt->abi, abi)) {
-            return abi_serializer(abi);
-         }
-      }
-
-      return optional<abi_serializer>();
-   };
-
+   packed_transaction pretty_input;
+   auto resolver = make_resolver(this);
    abi_serializer::from_variant(params, pretty_input, resolver);
    auto result = db.push_transaction(pretty_input, skip_flags);
 #warning TODO: get transaction results asynchronously
    fc::variant pretty_output;
    abi_serializer::to_variant(result, pretty_output, resolver);
-   return read_write::push_transaction_results{ pretty_input.id(), pretty_output };
+   return read_write::push_transaction_results{ result.id, pretty_output };
 }
 
 read_write::push_transactions_results read_write::push_transactions(const read_write::push_transactions_params& params) {
@@ -450,13 +464,6 @@ read_only::get_account_results read_only::get_account( const get_account_params&
    result.account_name = params.account_name;
 
    const auto& d = db.get_database();
-   share_type  balance        = contracts::get_eosio_balance(d, params.account_name );
-   const auto& staked_balance = d.get<staked_balance_object,by_owner_name>( params.account_name );
-
-   result.eos_balance          = asset(balance, EOS_SYMBOL);
-   result.staked_balance       = asset(staked_balance.staked_balance);
-   result.unstaking_balance    = asset(staked_balance.unstaking_balance);
-   result.last_unstaking_time  = staked_balance.last_unstaking_time;
 
    const auto& permissions = d.get_index<permission_index,by_owner>();
    auto perm = permissions.lower_bound( boost::make_tuple( params.account_name ) );
@@ -504,7 +511,7 @@ read_only::abi_bin_to_json_result read_only::abi_bin_to_json( const read_only::a
 }
 
 read_only::get_required_keys_result read_only::get_required_keys( const get_required_keys_params& params )const {
-   signed_transaction pretty_input;
+   transaction pretty_input;
    from_variant(params.transaction, pretty_input);
    auto required_keys_set = db.get_required_keys(pretty_input, params.available_keys);
    get_required_keys_result result;

@@ -34,7 +34,6 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 endif()
 
 
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 set(BUILD_DOXYGEN FALSE CACHE BOOL "Build doxygen documentation on every make")
 set(BUILD_MONGO_DB_PLUGIN FALSE CACHE BOOL "Build mongo database plugin")
@@ -69,15 +68,16 @@ ENDIF(WIN32)
 FIND_PACKAGE(Boost 1.64 REQUIRED COMPONENTS
     thread
     date_time
-    system
     filesystem
+    system
     program_options
     signals
     serialization
     chrono
     unit_test_framework
     context
-    locale)
+    locale
+    iostreams)
 
 if( WIN32 )
 
@@ -164,16 +164,16 @@ if(ENABLE_COVERAGE_TESTING)
   find_program( GENHTML_PATH NAMES genhtml)
 endif()
 
+add_subdirectory( externals )
+
 include(wasm)
-if(WASM_TOOLCHAIN)
+if(WASM_TOOLCHAIN_FOUND)
   message(STATUS "Using WASM clang => " ${WASM_CLANG})
   message(STATUS "Using WASM llc => " ${WASM_LLC})
   message(STATUS "Using WASM llvm-link => " ${WASM_LLVM_LINK})
   add_subdirectory(contracts)
 else()
-  message(STATUS "--------------------------------------------------------------------")
-  message(STATUS "No WASM compiler could be found ... (skipping building of contracts)")
-  message(STATUS "--------------------------------------------------------------------")
+  message( FATAL_ERROR "No WASM compiler cound be found" )
 endif()
 
 include(installer)

@@ -4,6 +4,7 @@
 #include "IR/Operators.h"
 #include "IR/OperatorPrinter.h"
 #include "Logging/Logging.h"
+#include "llvm/Support/raw_ostream.h"
 
 #define ENABLE_LOGGING 0
 #define ENABLE_FUNCTION_ENTER_EXIT_HOOKS 0
@@ -23,7 +24,7 @@ namespace LLVMJIT
 		std::vector<llvm::Constant*> importedFunctionPointers;
 		std::vector<llvm::Constant*> globalPointers;
 		llvm::Constant* defaultTablePointer;
-		llvm::Constant* defaultTableEndOffset;
+		llvm::Constant* defaultTableMaxElementIndex;
 		llvm::Constant* defaultMemoryBase;
 		llvm::Constant* defaultMemoryEndOffset;
 		
@@ -42,8 +43,12 @@ namespace LLVMJIT
 		, llvmModule(new llvm::Module("",context))
 		, diBuilder(*llvmModule)
 		{
-			diModuleScope = diBuilder.createFile("unknown","unknown");
+			diModuleScope = diBuilder.createFile("debug.info",".");
+#ifdef _DEBUG
+			diCompileUnit = diBuilder.createCompileUnit(llvm::dwarf::DW_LANG_C, diModuleScope,"WAVM",0,"",0);
+#else
 			diCompileUnit = diBuilder.createCompileUnit(0xffff,diModuleScope,"WAVM",true,"",0);
+#endif
 
 			diValueTypes[(Uptr)ValueType::any] = nullptr;
 			diValueTypes[(Uptr)ValueType::i32] = diBuilder.createBasicType("i32",32,llvm::dwarf::DW_ATE_signed);
@@ -58,8 +63,8 @@ namespace LLVMJIT
 			auto i32MaxAsMetadata = llvm::ConstantAsMetadata::get(emitLiteral(I32(INT32_MAX)));
 			likelyFalseBranchWeights = llvm::MDTuple::getDistinct(context,{llvm::MDString::get(context,"branch_weights"),zeroAsMetadata,i32MaxAsMetadata});
 			likelyTrueBranchWeights = llvm::MDTuple::getDistinct(context,{llvm::MDString::get(context,"branch_weights"),i32MaxAsMetadata,zeroAsMetadata});
-		}
 
+		}
 		llvm::Module* emit();
 	};
 
@@ -267,6 +272,7 @@ namespace LLVMJIT
 
 			// Cast the pointer to the appropriate type.
 			auto bytePointer = irBuilder.CreateInBoundsGEP(moduleContext.defaultMemoryBase,byteIndex);
+            
 			return irBuilder.CreatePointerCast(bytePointer,memoryType->getPointerTo());
 		}
 
@@ -679,7 +685,7 @@ namespace LLVMJIT
 			
 			// If the function index is larger than the function table size, trap.
 			emitConditionalTrapIntrinsic(
-				irBuilder.CreateICmpUGE(functionIndexZExt,moduleContext.defaultTableEndOffset),
+				irBuilder.CreateICmpUGE(functionIndexZExt,moduleContext.defaultTableMaxElementIndex),
 				"wavmIntrinsics.indirectCallIndexOutOfBounds",FunctionType::get(),{});
 
 			// Load the type for this table entry.
@@ -1592,11 +1598,11 @@ namespace LLVMJIT
 				llvmI8PtrType
 				});
 			defaultTablePointer = emitLiteralPointer(moduleInstance->defaultTable->baseAddress,tableElementType->getPointerTo());
-			defaultTableEndOffset = emitLiteral((Uptr)moduleInstance->defaultTable->endOffset);
+			defaultTableMaxElementIndex = emitLiteral(((Uptr)moduleInstance->defaultTable->endOffset)/sizeof(TableInstance::FunctionElement));
 		}
 		else
 		{
-			defaultTablePointer = defaultTableEndOffset = nullptr;
+			defaultTablePointer = defaultTableMaxElementIndex = nullptr;
 		}
 
 		// Create LLVM pointer constants for the module's imported functions.

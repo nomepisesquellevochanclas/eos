@@ -1,22 +1,21 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import testUtils
 
+import decimal
 import argparse
 import random
 import re
 
 ###############################################################
 # eosiod_run_test
-# --dumpErrorDetails <Upon error print tn_data_*/config.ini and tn_data_*/stderr.log to stdout>
-# --keepLogs <Don't delete tn_data_* folders upon test completion>
+# --dump-error-details <Upon error print tn_data_*/config.ini and tn_data_*/stderr.log to stdout>
+# --keep-logs <Don't delete tn_data_* folders upon test completion>
 ###############################################################
 
 Print=testUtils.Utils.Print
+errorExit=testUtils.Utils.errorExit
 
-def errorExit(msg="", raw=False, errorCode=1):
-    Print("ERROR:" if not raw else "", msg)
-    exit(errorCode)
 
 def cmdError(name, code=0, exitNow=False):
     msg="FAILURE - %s%s" % (name, ("" if code == 0 else (" returned error code %d" % code)))
@@ -222,8 +221,11 @@ try:
     if node is None:
         errorExit("Cluster in bad state, received None node")
 
+    Print("Create initial accounts")
+    node.createInitAccounts()
+
     Print("Create new account %s via %s" % (testeraAccount.name, initaAccount.name))
-    transId=node.createAccount(testeraAccount, initaAccount, waitForTransBlock=True)
+    transId=node.createAccount(testeraAccount, initaAccount, stakedDeposit=0, waitForTransBlock=True)
     if transId is None:
         cmdError("%s create account" % (ClientName))
         errorExit("Failed to create account %s" % (testeraAccount.name))
@@ -293,7 +295,7 @@ try:
             transferAmount, initaAccount.name, testeraAccount.name))
     transId=testUtils.Node.getTransId(trans)
 
-    expectedAmount=975311
+    expectedAmount=975311+5000 # 5000 initial deposit
     Print("Verify transfer, Expected: %d" % (expectedAmount))
     actualAmount=node.getAccountBalance(currencyAccount.name)
     if actualAmount is None:
@@ -363,12 +365,15 @@ try:
     typeVal=None
     amountVal=None
     if amINoon:
+        debug and Print("Transaction:", transaction)
         if not enableMongo:
-            typeVal=  transaction["transaction"]["actions"][1]["name"]
-            amountVal=transaction["transaction"]["actions"][1]["data"]["amount"]
+            typeVal=  transaction["transaction"]["data"]["actions"][0]["name"]
+            amountVal=transaction["transaction"]["data"]["actions"][0]["data"]["quantity"]
+            amountVal=int(decimal.Decimal(amountVal.split()[0])*10000)
         else:
             typeVal=  transaction["name"]
-            amountVal=transaction["data"]["amount"]
+            amountVal=transaction["data"]["quantity"]
+            amountVal=int(decimal.Decimal(amountVal.split()[0])*10000)
     else:
         if not enableMongo:
             typeVal=  transaction["transaction"]["messages"][0]["type"]
@@ -378,7 +383,7 @@ try:
             amountVal=transaction["data"]["amount"]
 
     if typeVal!= "transfer" or amountVal != 975311:
-        errorExit("FAILURE - get transaction trans_id failed: %s" % (transId), raw=True)
+        errorExit("FAILURE - get transaction trans_id failed: %s %s %s" % (transId, typeVal, amountVal), raw=True)
 
     Print("Get transactions for account %s" % (testeraAccount.name))
     actualTransactions=node.getTransactionsArrByAccount(testeraAccount.name)
@@ -453,13 +458,19 @@ try:
     Print("push transfer action to currency contract")
     contract="currency"
     action="transfer"
-    data="{\"from\":\"currency\",\"to\":\"inita\",\"quantity\":\"00.0050 CUR\",\"memo\":\"test\"}"
+    data="{\"from\":\"currency\",\"to\":\"inita\",\"quantity\":"
+    if amINoon:
+        data +="\"00.0050 CUR\",\"memo\":\"test\"}"
+    else:
+        data +="50}"
     opts="--permission currency@active"
+    if not amINoon:
+        opts += " --scope currency,inita"
     trans=node.pushMessage(contract, action, data, opts)
-    if trans is None:
+    if not trans[0]:
         cmdError("%s push message currency transfer" % (ClientName))
         errorExit("Failed to push message to currency contract")
-    transId=testUtils.Node.getTransId(trans)
+    transId=testUtils.Node.getTransId(trans[1])
 
     Print("verify transaction exists")
     if not node.waitForTransIdOnNode(transId):
@@ -512,11 +523,13 @@ try:
     else:
         Print("Test successful, %s returned error code: %d" % (ClientName, retMap["returncode"]))
 
-    Print("Producer tests")
-    trans=node.createProducer(testeraAccount.name, testeraAccount.ownerPublicKey, waitForTransBlock=False)
-    if trans is None:
-        cmdError("%s create producer" % (ClientName))
-        errorExit("Failed to create producer %s" % (testeraAccount.name))
+# TODO Currently unable to set producer
+    if not amINoon:
+        Print("Producer tests")
+        trans=node.createProducer(testeraAccount.name, testeraAccount.ownerPublicKey, waitForTransBlock=False)
+        if trans is None:
+            cmdError("%s create producer" % (ClientName))
+            errorExit("Failed to create producer %s" % (testeraAccount.name))
 
     Print("set permission")
     code="currency"
@@ -574,7 +587,7 @@ try:
     for blockNum in range(1, currentBlockNum+1):
         block=node.getBlock(blockNum, retry=False)
         if block is None:
-            cmdError("% get block" % (ClientName))
+            cmdError("%s get block" % (ClientName))
             errorExit("mongo get block by num %d" % blockNum)
 
         if enableMongo:

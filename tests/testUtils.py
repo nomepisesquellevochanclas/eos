@@ -1,3 +1,5 @@
+import copy
+import decimal
 import subprocess
 import time
 import glob
@@ -21,13 +23,15 @@ class Utils:
     Debug=False
     FNull = open(os.devnull, 'w')
 
-    EosServerName="eosiod"
     EosClientPath="programs/eosioc/eosioc"
-    EosWalletPath="programs/eosio-walletd/eosio-walletd"
-    EosServerName="eosiod"
-    EosServerPath="programs/eosiod/%s" % (EosServerName)
 
-    EosLauncherPath="programs/launcher/launcher"
+    EosWalletName="eosiowd"
+    EosWalletPath="programs/eosiowd/"+ EosWalletName
+
+    EosServerName="eosiod"
+    EosServerPath="programs/eosiod/"+ EosServerName
+
+    EosLauncherPath="programs/eosio-launcher/eosio-launcher"
     MongoPath="mongo"
     
     @staticmethod
@@ -46,6 +50,8 @@ class Utils:
     SigKillTag="kill"
     SigTermTag="term"
 
+    systemWaitTimeout=60
+
     # mongoSyncTime: eosiod mongodb plugin seems to sync with a 10-15 seconds delay. This will inject
     #  a wait period before the 2nd DB check (if first check fails)
     mongoSyncTime=25
@@ -55,15 +61,23 @@ class Utils:
     @staticmethod
     def iAmNotNoon():
         Utils.amINoon=False
-        Utils.EosServerName="eosd"
+
         Utils.EosClientPath="programs/eosc/eosc"
-        Utils.EosWalletPath="programs/eos-walletd/eos-walletd"
-        Utils.EosServerPath="programs/eosd/%s" % (Utils.EosServerName)
+
+        Utils.EosWalletName="eos-walletd"
+        Utils.EosWalletPath="programs/eos-walletd/"+ Utils.EosWalletName
+
+        Utils.EosServerName="eosd"
+        Utils.EosServerPath="programs/eosd/"+ Utils.EosServerName
 
     @staticmethod
     def setMongoSyncTime(syncTime):
         Utils.mongoSyncTime=syncTime
-    
+
+    @staticmethod
+    def setSystemWaitTimeout(timeout):
+        Utils.systemWaitTimeout=timeout
+
     @staticmethod
     def getChainStrategies():
         chainSyncStrategies={}
@@ -78,6 +92,17 @@ class Utils:
         chainSyncStrategies[chainSyncStrategy.name]=chainSyncStrategy
 
         return chainSyncStrategies
+
+    @staticmethod
+    def checkOutput(cmd):
+        assert(isinstance(cmd, list))
+        retStr=subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode("utf-8")
+        return retStr
+
+    @staticmethod
+    def errorExit(msg="", raw=False, errorCode=1):
+        Utils.Print("ERROR:" if not raw else "", msg)
+        exit(errorCode)
 
 ###########################################################################################
 class Table(object):
@@ -133,7 +158,7 @@ class Node(object):
 
     @staticmethod
     def runCmdReturnJson(cmd, trace=False):
-        retStr=Node.__checkOutput(cmd.split())
+        retStr=Utils.checkOutput(cmd.split())
         jStr=Node.filterJsonObject(retStr)
         trace and Utils.Print ("RAW > %s"% retStr)
         trace and Utils.Print ("JSON> %s"% jStr)
@@ -142,12 +167,18 @@ class Node(object):
 
     @staticmethod
     def __runCmdArrReturnJson(cmdArr, trace=False):
-        retStr=Node.__checkOutput(cmdArr)
+        retStr=Utils.checkOutput(cmdArr)
         jStr=Node.filterJsonObject(retStr)
         trace and Utils.Print ("RAW > %s"% retStr)
         trace and Utils.Print ("JSON> %s"% jStr)
         jsonData=json.loads(jStr)
         return jsonData
+
+    @staticmethod
+    def runCmdReturnStr(cmd, trace=False):
+        retStr=Node.__checkOutput(cmd.split())
+        trace and Utils.Print ("RAW > %s"% retStr)
+        return retStr
 
     @staticmethod
     def filterJsonObject(data):
@@ -207,6 +238,7 @@ class Node(object):
 
     @staticmethod
     def getTransId(trans):
+        #Utils.Print("%s" % trans)
         transId=trans["transaction_id"]
         return transId
 
@@ -246,6 +278,7 @@ class Node(object):
                 if not retry:
                     break
                 if self.mongoSyncTime is not None:
+                    Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (self.mongoSyncTime))
                     time.sleep(self.mongoSyncTime)
 
         return None
@@ -267,17 +300,18 @@ class Node(object):
             if not retry:
                 break
             if self.mongoSyncTime is not None:
+                Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (self.mongoSyncTime))
                 time.sleep(self.mongoSyncTime)
 
         return None
     
  
     def doesNodeHaveBlockNum(self, blockNum):
-        if self.alive is False:
-            return False
+        assert isinstance(blockNum, int)
 
-        block=self.getBlock(blockNum, silentErrors=True)
-        if block is None:
+        info=self.getInfo(silentErrors=True)
+        last_irreversible_block_num=int(info["last_irreversible_block_num"])
+        if blockNum > last_irreversible_block_num:
             return False
         else:
             return True
@@ -297,7 +331,7 @@ class Node(object):
         else:
             for i in range(2):
                 cmd="%s %s" % (Utils.MongoPath, self.mongoEndpointArgs)
-                subcommand='db.Transactions.findOne( { "transaction_id": "%s" } )' % (transId)
+                subcommand='db.Transactions.findOne( { $and : [ { "transaction_id": "%s" }, {"pending":false} ] } )' % (transId)
                 Utils.Debug and Utils.Print("cmd: echo '%s' | %s" % (subcommand, cmd))
                 try:
                     trans=Node.runMongoCmdReturnJson(cmd.split(), subcommand)
@@ -310,6 +344,7 @@ class Node(object):
                 if not retry:
                     break
                 if self.mongoSyncTime is not None:
+                    Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (self.mongoSyncTime))
                     time.sleep(self.mongoSyncTime)
                 
         return None
@@ -331,6 +366,7 @@ class Node(object):
             if not retry:
                 break
             if self.mongoSyncTime is not None:
+                Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (self.mongoSyncTime))
                 time.sleep(self.mongoSyncTime)
                 
         return None
@@ -354,6 +390,7 @@ class Node(object):
             if not retry:
                 break
             if self.mongoSyncTime is not None:
+                Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (self.mongoSyncTime))
                 time.sleep(self.mongoSyncTime)
                 
         return None
@@ -375,31 +412,77 @@ class Node(object):
             if not retry:
                 break
             if self.mongoSyncTime is not None:
+                Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (self.mongoSyncTime))
                 time.sleep(self.mongoSyncTime)
                 
         return None
 
-        
     def doesNodeHaveTransId(self, transId):
         trans=self.getTransaction(transId, silentErrors=True)
-        if trans is not None:
-            return True
-        else:
+        if trans is None:
             return False
+
+        blockNum=None
+        if not self.enableMongo:
+            blockNum=int(trans["transaction"]["data"]["ref_block_num"])
+        else:
+            blockNum=int(trans["ref_block_num"])
+
+        blockNum += 1
+        return self.doesNodeHaveBlockNum(blockNum)
+
+    def createInitAccounts(self):
+        eosio = copy.copy(Cluster.initaAccount)
+        eosio.name = "eosio"
+
+        # publish system contract
+        wastFile="contracts/eosio.system/eosio.system.wast"
+        abiFile="contracts/eosio.system/eosio.system.abi"
+        Utils.Print("Publish eosio.system contract")
+        trans=self.publishContract(eosio.name, wastFile, abiFile, waitForTransBlock=True)
+        if trans is None:
+           Utils.errorExit("Failed to publish oesio.system.")
+
+        Utils.Print("push issue action to eosio contract")
+        contract=eosio.name
+        action="issue"
+        data="{\"to\":\"eosio\",\"quantity\":\"1000000000.0000 EOS\"}"
+        opts="--permission eosio@active"
+        trans=self.pushMessage(contract, action, data, opts)
+        transId=Node.getTransId(trans[1])
+        self.waitForTransIdOnNode(transId)
+
+        expectedAmount=10000000000000
+        Utils.Print("Verify eosio issue, Expected: %d" % (expectedAmount))
+        actualAmount=self.getAccountBalance(eosio.name)
+        if expectedAmount != actualAmount:
+            Utils.errorExit("Issue verification failed. Excepted %d, actual: %d" % (expectedAmount, actualAmount))
+
+        initx = copy.copy(Cluster.initaAccount)
+        self.createAccount(Cluster.initaAccount, eosio, 0)
+        for i in range(2, 21):
+            initx.name = "init" + chr(ord('a')+i)
+            self.createAccount(initx, eosio, 0)
+        self.createAccount(Cluster.initbAccount, eosio, 0, True)
+        for i in range(0, 21):
+            initx.name = "init" + chr(ord('a')+i)
+            trans = self.transferFunds(eosio, initx, 10000000000, "init")
+        transId=Node.getTransId(trans)
+        self.waitForTransIdOnNode(transId)
 
     # Create account and return creation transactions. Return transaction json object
     # waitForTransBlock: wait on creation transaction id to appear in a block
     def createAccount(self, account, creatorAccount, stakedDeposit=1000, waitForTransBlock=False):
         cmd=None
         if Utils.amINoon:
-            cmd="%s %s create account --staked-deposit %d %s %s %s %s" % (
-                Utils.EosClientPath, self.endpointArgs, stakedDeposit, creatorAccount.name, account.name,
+            cmd="%s %s create account %s %s %s %s" % (
+                Utils.EosClientPath, self.endpointArgs, creatorAccount.name, account.name,
                 account.ownerPublicKey, account.activePublicKey)
         else:
             cmd="%s %s create account %s %s %s %s" % (Utils.EosClientPath, self.endpointArgs,
                                                       creatorAccount.name, account.name,
                                                       account.ownerPublicKey, account.activePublicKey)
-            
+
         Utils.Debug and Utils.Print("cmd: %s" % (cmd))
         trans=None
         try:
@@ -409,6 +492,13 @@ class Node(object):
             msg=ex.output.decode("utf-8")
             Utils.Print("ERROR: Exception during account creation. %s" % (msg))
             return None
+
+        if waitForTransBlock and not self.waitForTransIdOnNode(transId):
+            return None
+
+        if stakedDeposit > 0:
+            trans = self.transferFunds(creatorAccount, account, stakedDeposit, "init")
+            transId=Node.getTransId(trans)
 
         if waitForTransBlock and not self.waitForTransIdOnNode(transId):
             return None
@@ -438,13 +528,24 @@ class Node(object):
             return None
 
 
+    def getEosCurrencyBalance(self, name):
+        cmd="%s %s get currency balance eosio %s EOS" % (Utils.EosClientPath, self.endpointArgs, name)
+        Utils.Debug and Utils.Print("cmd: %s" % (cmd))
+        try:
+            trans=Node.runCmdReturnStr(cmd)
+            return trans
+        except subprocess.CalledProcessError as ex:
+            msg=ex.output.decode("utf-8")
+            Utils.Print("ERROR: Exception during get currency balance. %s" % (msg))
+            return None
+
     # Verifies account. Returns "get account" json return object
     def verifyAccount(self, account):
         if not self.enableMongo:
             ret=self.getEosAccount(account.name)
             if ret is not None:
-                stakedBalance=ret["staked_balance"]
-                if stakedBalance is None:
+                account_name=ret["account_name"]
+                if account_name is None:
                     Utils.Print("ERROR: Failed to verify account creation.", account.name)
                     return None
                 return ret
@@ -452,61 +553,74 @@ class Node(object):
             for i in range(2):
                 ret=self.getEosAccountFromDb(account.name)
                 if ret is not None:
-                    stakedBalance=ret["staked_balance"]
-                    if stakedBalance is None:
+                    account_name=ret["name"]
+                    if account_name is None:
                         Utils.Print("ERROR: Failed to verify account creation.", account.name)
                         return None
                     return ret
                 if self.mongoSyncTime is not None:
+                    Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (self.mongoSyncTime))
                     time.sleep(self.mongoSyncTime)
 
         return None
     
-    def waitForBlockNumOnNode(self, blockNum, timeout=60):
+    def waitForBlockNumOnNode(self, blockNum, timeout=None):
+        if timeout is None:
+            timeout=Utils.systemWaitTimeout
         startTime=time.time()
         remainingTime=timeout
+        Utils.Debug and Utils.Print("cmd: remaining time %d seconds" % (remainingTime))
         while time.time()-startTime < timeout:
             if self.doesNodeHaveBlockNum(blockNum):
                 return True
             sleepTime=3 if remainingTime > 3 else (3 - remainingTime)
             remainingTime -= sleepTime
+            Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (sleepTime))
             time.sleep(sleepTime)
 
         return False
 
-    def waitForTransIdOnNode(self, transId, timeout=60):
+    def waitForTransIdOnNode(self, transId, timeout=None):
+        if timeout is None:
+            timeout=Utils.systemWaitTimeout
         startTime=time.time()
         remainingTime=timeout
+        Utils.Debug and Utils.Print("cmd: remaining time %d seconds" % (remainingTime))
         while time.time()-startTime < timeout:
             if self.doesNodeHaveTransId(transId):
                 return True
             sleepTime=3 if remainingTime > 3 else (3 - remainingTime)
             remainingTime -= sleepTime
+            Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (sleepTime))
             time.sleep(sleepTime)
 
         return False
 
-    def waitForNextBlock(self, timeout=60):
+    def waitForNextBlock(self, timeout=None):
+        if timeout is None:
+            timeout=Utils.systemWaitTimeout
         startTime=time.time()
         remainingTime=timeout
-        num=self.getHeadBlockNum()
+        Utils.Debug and Utils.Print("cmd: remaining time %d seconds" % (remainingTime))
+        num=self.getIrreversibleBlockNum()
         Utils.Debug and Utils.Print("Current block number: %s" % (num))
         
         while time.time()-startTime < timeout:
-            nextNum=self.getHeadBlockNum()
+            nextNum=self.getIrreversibleBlockNum()
             if nextNum > num:
                 Utils.Debug and Utils.Print("Next block number: %s" % (nextNum))
                 return True
 
             sleepTime=.5 if remainingTime > .5 else (.5 - remainingTime)
             remainingTime -= sleepTime
+            Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (sleepTime))
             time.sleep(sleepTime)
 
         return False
 
     # Trasfer funds. Returns "transfer" json return object
     def transferFunds(self, source, destination, amount, memo="memo", force=False):
-        cmd="%s %s transfer %s %s %d" % (
+        cmd="%s %s -v transfer %s %s %d" % (
             Utils.EosClientPath, self.endpointArgs, source.name, destination.name, amount)
         cmdArr=cmd.split()
         cmdArr.append(memo)
@@ -581,13 +695,14 @@ class Node(object):
 
     def getAccountBalance(self, name):
         if not self.enableMongo:
-            account=self.getEosAccount(name)
-            field=account["eos_balance"]
-            balanceStr=field.split()[0]
-            balance=int(float(balanceStr)*10000)
+            amount=self.getEosCurrencyBalance(name)
+            Utils.Debug and Utils.Print("getEosCurrencyBalance", name, amount)
+            balanceStr=amount.split()[0]
+            balance=int(decimal.Decimal(balanceStr[1:])*10000)
             return balance
         else:
             if self.mongoSyncTime is not None:
+                Utils.Debug and Utils.Print("cmd: sleep %d seconds" % (self.mongoSyncTime))
                 time.sleep(self.mongoSyncTime)
 
             account=self.getEosAccountFromDb(name)
@@ -625,7 +740,7 @@ class Node(object):
         cmd="%s %s get code %s" % (Utils.EosClientPath, self.endpointArgs, account)
         Utils.Debug and Utils.Print("cmd: %s" % (cmd))
         try:
-            retStr=Node.__checkOutput(cmd.split())
+            retStr=Utils.checkOutput(cmd.split())
             #Utils.Print ("get code> %s"% retStr)
             p=re.compile('code\shash: (\w+)\n', re.MULTILINE)
             m=p.search(retStr)
@@ -644,7 +759,7 @@ class Node(object):
 
     # publish contract and return transaction as json object
     def publishContract(self, account, wastFile, abiFile, waitForTransBlock=False, shouldFail=False):
-        cmd="%s %s set contract %s %s %s" % (Utils.EosClientPath, self.endpointArgs, account, wastFile, abiFile)
+        cmd="%s %s -v set contract %s %s %s" % (Utils.EosClientPath, self.endpointArgs, account, wastFile, abiFile)
         Utils.Debug and Utils.Print("cmd: %s" % (cmd))
         trans=None
         try:
@@ -673,7 +788,7 @@ class Node(object):
             return None
         return trans
 
-    # create producer and retrun transaction as json object
+    # create producer and return transaction as json object
     def createProducer(self, account, ownerPublicKey, waitForTransBlock=False):
         cmd="%s %s create producer %s %s" % (Utils.EosClientPath, self.endpointArgs, account, ownerPublicKey)
         Utils.Debug and Utils.Print("cmd: %s" % (cmd))
@@ -724,7 +839,8 @@ class Node(object):
         keys=list(row.keys())
         return keys
 
-    def pushMessage(self, contract, action, data, opts):
+    # returns tuple with transaction and 
+    def pushMessage(self, contract, action, data, opts, silentErrors=False):
         cmd=None
         if Utils.amINoon:
             cmd="%s %s push action %s %s" % (Utils.EosClientPath, self.endpointArgs, contract, action)
@@ -738,11 +854,12 @@ class Node(object):
         Utils.Debug and Utils.Print("cmd: %s" % (cmdArr))
         try:
             trans=Node.__runCmdArrReturnJson(cmdArr)
-            return trans
+            return (True, trans)
         except subprocess.CalledProcessError as ex:
             msg=ex.output.decode("utf-8")
-            Utils.Print("ERROR: Exception during push message. %s" % (msg))
-            return None
+            if not silentErrors:
+                Utils.Print("ERROR: Exception during push message. %s" % (msg))
+            return (False, msg)
 
     def setPermission(self, account, code, pType, requirement, waitForTransBlock=False):
         cmd="%s %s set action permission %s %s %s %s" % (
@@ -806,7 +923,19 @@ class Node(object):
                 blockNum=block["block_num"]
                 return blockNum
         return None
-    
+
+    def getIrreversibleBlockNum(self):
+        if not self.enableMongo:
+            info=self.getInfo()
+            if info is not None:
+                return info["last_irreversible_block_num"]
+        else:
+            block=self.getBlockFromDb(-1)
+            if block is not None:
+                blockNum=block["block_num"]
+                return blockNum
+        return None
+
 ###########################################################################################
 
 Wallet=namedtuple("Wallet", "name password host port")
@@ -908,7 +1037,7 @@ class WalletMgr(object):
 
     def unlockWallet(self, wallet):
         cmd="%s %s wallet unlock --name %s" % (Utils.EosClientPath, self.endpointArgs, wallet.name)
-        #Utils.Debug and Utils.Print("cmd: %s" % (cmd))
+        Utils.Debug and Utils.Print("cmd: %s" % (cmd))
         popen=subprocess.Popen(cmd.split(), stdout=Utils.FNull, stdin=subprocess.PIPE)
         outs, errs = popen.communicate(input=wallet.password.encode("utf-8"))
         if 0 != popen.wait():
@@ -968,8 +1097,9 @@ class WalletMgr(object):
                 shutil.copyfileobj(f, sys.stdout)
     
     def killall(self):
-        if self.__walletPid is not None:
-            os.kill(self.__walletPid, signal.SIGKILL)
+        cmd="pkill %s" % (Utils.EosWalletName)
+        Utils.Debug and Utils.Print("cmd: %s" % (cmd))
+        subprocess.call(cmd.split())
             
     def cleanup(self):
         dataDir=WalletMgr.__walletDataDir
@@ -988,11 +1118,17 @@ class Cluster(object):
     # init accounts
     initaAccount=Account("inita")
     initaAccount.ownerPrivateKey="5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3";
+    initaAccount.ownerPublicKey="EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV";
+    initaAccount.activePrivateKey="5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3";
+    initaAccount.activePublicKey="EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV";
     initbAccount=Account("initb")
     initbAccount.ownerPrivateKey="5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3";
+    initbAccount.ownerPublicKey="EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV";
+    initbAccount.activePrivateKey="5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3";
+    initbAccount.activePublicKey="EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV";
 
     # walletd [True|False] Is walletd running. If not load the wallet plugin
-    def __init__(self, walletd=False, localCluster=True, host="localhost", port=8888, walletHost="localhost", walletPort=8899, enableMongo=False, mongoHost="localhost", mongoPort=27017, mongoDb="EOStest", initaPrvtKey=initaAccount.ownerPrivateKey, initbPrvtKey=initbAccount.ownerPrivateKey):
+    def __init__(self, walletd=False, localCluster=True, host="localhost", port=8888, walletHost="localhost", walletPort=8899, enableMongo=False, mongoHost="localhost", mongoPort=27017, mongoDb="EOStest", initaPrvtKey=initaAccount.ownerPrivateKey, initbPrvtKey=initbAccount.ownerPrivateKey, staging=False):
         self.accounts={}
         self.nodes={}
         self.localCluster=localCluster
@@ -1017,6 +1153,7 @@ class Cluster(object):
             self.mongoEndpointArgs += "--host %s --port %d %s" % (mongoHost, mongoPort, mongoDb)
         Cluster.initaAccount.ownerPrivateKey=initaPrvtKey
         Cluster.initbAccount.ownerPrivateKey=initbPrvtKey
+        self.staging=staging
 
     def setChainStrategy(self, chainSyncStrategy=Utils.SyncReplayTag):
         self.__chainSyncStrategy=self.__chainSyncStrategies.get(chainSyncStrategy)
@@ -1038,6 +1175,8 @@ class Cluster(object):
         cmd="%s -p %s -n %s -s %s -d %s" % (
             Utils.EosLauncherPath, pnodes, total_nodes, topo, delay)
         cmdArr=cmd.split()
+        if self.staging:
+            cmdArr.append("--nogen")
         if not self.walletd or self.enableMongo:
             if Utils.amINoon:
                 cmdArr.append("--eosiod")
@@ -1047,7 +1186,7 @@ class Cluster(object):
                 cmdArr.append("--plugin eosio::wallet_api_plugin")
             if self.enableMongo:
                 if Utils.amINoon:
-                    cmdArr.append("--plugin eosio::mongo_db_plugin --mongodb-uri %s" % self.mongoUri)
+                    cmdArr.append("--plugin eosio::mongo_db_plugin --resync --mongodb-uri %s" % self.mongoUri)
                 else:
                     cmdArr.append("--plugin eosio::db_plugin --mongodb-uri %s" % self.mongoUri)
 
@@ -1115,8 +1254,11 @@ class Cluster(object):
 
     # If a last transaction exists wait for it on root node, then collect its head block number.
     #  Wait on this block number on each cluster node
-    def waitOnClusterSync(self, timeout=60):
+    def waitOnClusterSync(self, timeout=None):
+        if timeout is None:
+            timeout=Utils.systemWaitTimeout
         startTime=time.time()
+        Utils.Debug and Utils.Print("cmd: remaining time %d seconds" % (timeout))
         if self.nodes[0].alive is False:
             Utils.Print("ERROR: Root node is down.")
             return False;
@@ -1135,9 +1277,12 @@ class Cluster(object):
         currentTimeout=timeout-(time.time()-startTime)
         return self.waitOnClusterBlockNumSync(targetHeadBlockNum, currentTimeout)
 
-    def waitOnClusterBlockNumSync(self, targetHeadBlockNum, timeout=60):
+    def waitOnClusterBlockNumSync(self, targetHeadBlockNum, timeout=None):
+        if timeout is None:
+            timeout=Utils.systemWaitTimeout
         startTime=time.time()
         remainingTime=timeout
+        Utils.Debug and Utils.Print("cmd: remaining time %d seconds" % (remainingTime))
         while time.time()-startTime < timeout:
             synced=True
             for node in self.nodes:
@@ -1151,6 +1296,7 @@ class Cluster(object):
             #Utils.Debug and Utils.Print("Brief pause to allow nodes to catch up.")
             sleepTime=3 if remainingTime > 3 else (3 - remainingTime)
             remainingTime -= sleepTime
+            Utils.Debug and Utils.Print("cmd: remaining time %d seconds" % (remainingTime))
             time.sleep(sleepTime)
 
         return False
@@ -1229,14 +1375,14 @@ class Cluster(object):
         for account in accounts:
             Utils.Print("Importing keys for account %s into wallet %s." % (account.name, wallet.name))
             if not self.walletMgr.importKey(account, wallet):
-                errorExit("Failed to import key for account %s" % (account.name))
+                Utils.Print("ERROR: Failed to import key for account %s" % (account.name))
                 return False
 
         self.accounts=accounts
         return True
 
     def getNode(self, id=0):
-        return self.nodes[0]
+        return self.nodes[id]
 
     def getNodes(self):
         return self.nodes
@@ -1359,7 +1505,11 @@ class Cluster(object):
         nodes=[]
 
         try:
-            cmd="pgrep -a %s" % (Utils.EosServerName)
+            pgrepOpts="-a"
+            if sys.platform == "darwin":
+                pgrepOpts="-fl"
+
+            cmd="pgrep %s %s" % (pgrepOpts, Utils.EosServerName)
             Utils.Debug and Utils.Print("cmd: %s" % (cmd))
             psOut=subprocess.check_output(cmd.split()).decode("utf-8")
             #Utils.Print("psOut: <%s>" % psOut)
@@ -1455,9 +1605,11 @@ class Cluster(object):
             except:
                 pass
             
-    def waitForNextBlock(self, timeout=60):
+    def waitForNextBlock(self, timeout=None):
+        if timeout is None:
+            timeout=Utils.systemWaitTimeout
         node=self.nodes[0]
-        return node.waitForNextBlock()
+        return node.waitForNextBlock(timeout)
     
     def cleanup(self):
         for f in glob.glob("tn_data_*"):

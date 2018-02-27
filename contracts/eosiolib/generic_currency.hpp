@@ -5,9 +5,10 @@
 #include <eosiolib/dispatcher.hpp>
 #include <eosiolib/serialize.hpp>
 #include <eosiolib/action.hpp>
-#include <eosiolib/string.hpp>
+#include <string>
 
 namespace eosio {
+   using std::string;
 
    template<typename Token>
    class generic_currency {
@@ -41,7 +42,7 @@ namespace eosio {
              template<typename DataStream>
              friend DataStream& operator >> ( DataStream& ds, transfer& t ){
                 ds >> t.from >> t.to >> t.quantity;
-                assert( t.quantity.symbol== token_type::symbol, "unexpected asset type" );
+                eosio_assert( t.quantity.symbol== token_type::symbol, "unexpected asset type" );
                 return ds;
              }
           };
@@ -49,7 +50,7 @@ namespace eosio {
           struct transfer_memo : public transfer {
              transfer_memo(){}
              transfer_memo( account_name f, account_name t, token_type q, string m )
-             :transfer( f, t, q ), memo( move(m) ){}
+             :transfer( f, t, q ), memo( std::move(m) ){}
 
              string       memo;
 
@@ -74,8 +75,8 @@ namespace eosio {
            *  Each user stores their balance in the singleton table under the
            *  scope of their account name.
            */
-          typedef table64<code, accounts_table_name, account>      accounts;
-          typedef table64<code, stats_table_name, currency_stats>  stats;
+          typedef table64<code, accounts_table_name, code, account>      accounts;
+          typedef table64<code, stats_table_name, code, currency_stats>  stats;
 
           static token_type get_balance( account_name owner ) {
              return accounts::get_or_create( token_type::symbol, owner ).balance;
@@ -109,13 +110,13 @@ namespace eosio {
           static void inline_transfer( account_name from, account_name to, token_type quantity, 
                                        string memo = string() )
           {
-             action act( permission_level(code,N(active)), transfer_memo( from, to, asset(quantity), move(memo) ));
+             action act( permission_level(from,N(active)), transfer_memo( from, to, asset(quantity), move(memo) ));
              act.send();
           }
 
 
          static void apply( account_name c, action_name act) {
-            eosio::dispatch<generic_currency, transfer_memo, issue>(c,act);
+            eosio::dispatch<generic_currency, transfer, issue>(c,act);
          }
    };
 

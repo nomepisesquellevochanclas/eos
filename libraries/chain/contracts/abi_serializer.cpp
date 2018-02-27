@@ -3,6 +3,7 @@
  *  @copyright defined in eos/LICENSE.txt
  */
 #include <eosio/chain/contracts/abi_serializer.hpp>
+#include <eosio/chain/contracts/chain_initializer.hpp>
 #include <eosio/chain/contracts/types.hpp>
 #include <eosio/chain/authority.hpp>
 #include <eosio/chain/chain_config.hpp>
@@ -62,7 +63,9 @@ namespace eosio { namespace chain { namespace contracts {
       built_in_types.emplace("string",                    pack_unpack<string>());
       built_in_types.emplace("time",                      pack_unpack<fc::time_point_sec>());
       built_in_types.emplace("signature",                 pack_unpack<signature_type>());
-      built_in_types.emplace("checksum",                  pack_unpack<checksum_type>());
+      built_in_types.emplace("checksum160",               pack_unpack<checksum160_type>());
+      built_in_types.emplace("checksum256",               pack_unpack<checksum256_type>());
+      built_in_types.emplace("checksum512",               pack_unpack<checksum512_type>());
       built_in_types.emplace("field_name",                pack_unpack<field_name>());
       built_in_types.emplace("fixed_string32",            pack_unpack<fixed_string32>());
       built_in_types.emplace("fixed_string16",            pack_unpack<fixed_string16>());
@@ -98,7 +101,6 @@ namespace eosio { namespace chain { namespace contracts {
       built_in_types.emplace("action_def",                pack_unpack<action_def>());
       built_in_types.emplace("table_def",                 pack_unpack<table_def>());
       built_in_types.emplace("abi_def",                   pack_unpack<abi_def>());
-      built_in_types.emplace("nonce",                     pack_unpack<nonce>());
    }
 
    void abi_serializer::set_abi(const abi_def& abi) {
@@ -130,7 +132,7 @@ namespace eosio { namespace chain { namespace contracts {
       FC_ASSERT( actions.size() == abi.actions.size() );
       FC_ASSERT( tables.size() == abi.tables.size() );
    }
-   
+
    bool abi_serializer::is_builtin_type(const type_name& type)const {
       return built_in_types.find(type) != built_in_types.end();
    }

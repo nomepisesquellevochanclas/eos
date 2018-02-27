@@ -19,6 +19,9 @@ namespace eosio { namespace chain {
       account_name         name;
       uint8_t              vm_type      = 0;
       uint8_t              vm_version   = 0;
+      bool                 privileged   = false;
+      bool                 frozen       = false;
+
       time_point_sec       last_code_update;
       digest_type          code_version;
       block_timestamp_type creation_date;
@@ -32,6 +35,13 @@ namespace eosio { namespace chain {
          abi.resize( fc::raw::pack_size( a ) );
          fc::datastream<char*> ds( abi.data(), abi.size() );
          fc::raw::pack( ds, a );
+      }
+
+      eosio::chain::contracts::abi_def get_abi()const {
+         eosio::chain::contracts::abi_def a;
+         fc::datastream<const char*> ds( abi.data(), abi.size() );
+         fc::raw::unpack( ds, a );
+         return a;
       }
    };
    using account_id_type = account_object::id_type;
