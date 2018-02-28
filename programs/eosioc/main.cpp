@@ -293,7 +293,7 @@ fc::variant push_transaction( signed_transaction& trx, packed_transaction::compr
     if (!tx_dont_broadcast) {
        return call(push_txn_func, packed_transaction(trx, compression));
     } else {
-       return fc::variant(packed_transaction(trx, compression));
+       return fc::variant(trx);
     }
 }
 
@@ -777,7 +777,7 @@ int main( int argc, char** argv ) {
       signed_transaction trx;
       if (tx_force_unique && memo.size() == 0) {
          // use the memo to add a nonce
-         memo = fc::to_string(generate_nonce_value());
+         memo = generate_nonce_value();
          tx_force_unique = false;
       }
 
@@ -959,7 +959,7 @@ int main( int argc, char** argv ) {
       trx.sign(priv_key, chain_id_type{});
 
       if(push_trx) {
-         auto trx_result = call(push_txn_func, trx);
+         auto trx_result = call(push_txn_func, packed_transaction(trx, packed_transaction::none));
          std::cout << fc::json::to_pretty_string(trx_result) << std::endl;
       } else {
          std::cout << fc::json::to_pretty_string(trx) << std::endl;
@@ -1023,7 +1023,8 @@ int main( int argc, char** argv ) {
             trx_var = fc::json::from_string(trx_to_push);
          }
       } EOS_CAPTURE_AND_RETHROW(transaction_type_exception, "Fail to parse transaction JSON")
-      auto trx_result = call(push_txn_func, trx_var);
+      signed_transaction trx = trx_var.as<signed_transaction>();
+      auto trx_result = call(push_txn_func, packed_transaction(trx, packed_transaction::none));
       std::cout << fc::json::to_pretty_string(trx_result) << std::endl;
    });
 
