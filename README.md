@@ -1,3 +1,8 @@
+			   ***************************************    
+			       Eos Fork for the BITE community 
+			   ***************************************    
+
+
 ## EOS.IO - The Most Powerful Infrastructure for Decentralized Applications
 
 [![Build Status](https://travis-ci.org/EOSIO/eos.svg?branch=master)](https://travis-ci.org/EOSIO/eos)
